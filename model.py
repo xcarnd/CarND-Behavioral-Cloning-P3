@@ -66,36 +66,12 @@ for d in sample_dirs:
                 'steering': -steering
             })
 
-def make_keeper_counter(rate):
-    """Utility for testing where one sample shall be kept when doing samples discarding.
-    """
-    kept = 0
-    total = 0
-    def shouldKeep():
-        nonlocal kept, total
-        if total == 0:
-            total += 1
-            kept += 1
-            return True
-        keep_rate = kept / total
-        total += 1
-        if keep_rate < rate:
-            kept += 1
-            return True
-        else:
-            return False
-    return shouldKeep
-
 samples = []
 samples_all = shuffle(samples_all)
 print(len(samples_all))
 
-# keep 50% samples which (absolute) steering angles are < 0.025 * 25 = 0.625 degrees
-keeper1 = make_keeper_counter(0.5)
 for sample in samples_all:
     steering = sample['steering']
-    if abs(steering) < 0.025 and not keeper1():
-        continue
     samples.append(sample)
 
 # splitting data points into training set and validation set
