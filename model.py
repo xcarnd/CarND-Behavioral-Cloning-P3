@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-
+import argparse
 import csv
 import cv2
 import numpy as np
@@ -9,37 +9,41 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Flatten, Lambda, Activation, Dropout
 from keras.layers.convolutional import Conv2D, Cropping2D
 from keras.layers.pooling import MaxPooling2D
+from keras.models import load_model
 import math
 import pickle
 import os
+import random
+
+parser = argparse.ArgumentParser(description = "Model trainer")
+parser.add_argument('--model', default="model", metavar='MODEL', help='name of the output model.')
+parser.add_argument('--epochs', default="10", type=int, metavar='EPOCHS', help='number of epochs to train.')
+args = parser.parse_args()
 
 # hyper parameters
-left_right_correction = 0.3
+# batch size
+batch_size = 64
 
-def defaultReader(sample):
-    img = cv2.imread(sample['image'])
-    steering = sample['steering']
-    return img, steering
+image_size = (160, 320, 3)
+cropping_tb = (65, 25)
+cropping_lr = (0, 0)
 
-def leftReader(sample):
-    img = cv2.imread(sample['image'])
-    steering = sample['steering']
-    return img, steering + left_right_correction
+def readImg(img):
+    img = cv2.imread(img)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+    return img
 
-def rightReader(sample):
-    img = cv2.imread(sample['image'])
-    steering = sample['steering']
-    return img, steering - left_right_correction
+def imageReadFn(path):
+    return lambda : readImg(path)
 
-def fliplrReader(sample):
-    img = cv2.imread(sample['image'])
-    steering = sample['steering']
-    return np.fliplr(img), -steering
+def flippedImageReadFn(path):
+    return lambda : np.fliplr(readImg(path))
 
+# preparing training and validating samples
 data_base = 'data'
 sample_dirs = os.listdir(data_base)
 sample_dirs = [data_base + "/" + d for d in sample_dirs]
-samples = []
+samples_all = []
 for d in sample_dirs:
     with open(d + '/driving_log.csv') as csvfile:
         reader = csv.reader(csvfile)
@@ -49,27 +53,52 @@ for d in sample_dirs:
             center = d + "/IMG/" + center.split("\\")[-1]
             left   = d + "/IMG/" + left.split("\\")[-1]
             right  = d + "/IMG/" + right.split("\\")[-1]
-            samples.append({
-                'image': center,
-                'steering': float(line[3]),
-                'reader': defaultReader
+            steering = float(line[3])
+
+            # image from center camera
+            samples_all.append({
+                'imageFn': imageReadFn(center),
+                'steering':  steering
             })
-            samples.append({
-                'image': center,
-                'steering': float(line[3]),
-                'reader': fliplrReader
-            })
-            samples.append({
-                'image': left,
-                'steering': float(line[3]),
-                'reader': leftReader
-            })
-            samples.append({
-                'image': right,
-                'steering': float(line[3]),
-                'reader': rightReader
+            # image from center camera, flipped
+            samples_all.append({
+                'imageFn': flippedImageReadFn(center),
+                'steering': -steering
             })
 
+def make_keeper_counter(rate):
+    """Utility for testing where one sample shall be kept when doing samples discarding.
+    """
+    kept = 0
+    total = 0
+    def shouldKeep():
+        nonlocal kept, total
+        if total == 0:
+            total += 1
+            kept += 1
+            return True
+        keep_rate = kept / total
+        total += 1
+        if keep_rate < rate:
+            kept += 1
+            return True
+        else:
+            return False
+    return shouldKeep
+
+samples = []
+samples_all = shuffle(samples_all)
+print(len(samples_all))
+
+# keep 50% samples which (absolute) steering angles are < 0.025 * 25 = 0.625 degrees
+keeper1 = make_keeper_counter(0.5)
+for sample in samples_all:
+    steering = sample['steering']
+    if abs(steering) < 0.025 and not keeper1():
+        continue
+    samples.append(sample)
+
+# splitting data points into training set and validation set
 train_samples, valid_samples = train_test_split(samples, test_size = 0.2)
 num_train_samples = len(train_samples)
 num_valid_samples = len(valid_samples)
@@ -78,6 +107,8 @@ print("Number of train samples:", num_train_samples)
 print("Number of valid samples:", num_valid_samples)
 
 def generator(samples, batch_size = 32):
+    """Batch generator feeding to the network.
+    """
     num_samples = len(samples)
     while True:
         samples = shuffle(samples)
@@ -86,7 +117,7 @@ def generator(samples, batch_size = 32):
 
             X,y = [],[]
             for sample in batch:
-                img,steering = sample['reader'](sample)
+                img, steering = sample['imageFn'](), sample['steering']
                 X.append(img)
                 y.append(steering)
             X = np.array(X)
@@ -94,25 +125,15 @@ def generator(samples, batch_size = 32):
             X, y = shuffle(X, y)
             yield (X, y)
 
-# model definition - LeNet
-# model = Sequential()
-# model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=(160, 320, 3)))
-# model.add(Conv2D(6, (5, 5)))
-# model.add(Activation('relu'))
-# model.add(MaxPooling2D((2, 2)))
-# model.add(Conv2D(16, (5, 5)))
-# model.add(Activation('relu'))
-# model.add(MaxPooling2D((2, 2)))
-# model.add(Flatten())
-# model.add(Dense(400))
-# model.add(Dense(120))
-# model.add(Dense(84))
-# model.add(Dense(1))
-# model.compile(loss='mse', optimizer='adam')
-
-# model definition - from nvidia
+model_name = "model"
+if args.model:
+    model_name = args.model
+    
+# model definition - NVidia architecture
 model = Sequential()
-model.add(Cropping2D(cropping=((50, 20), (0, 0)), input_shape=(160, 320, 3)))
+# cropping
+model.add(Cropping2D(cropping=(cropping_tb, cropping_lr), input_shape=image_size))
+# normalizing image ( to [-0.5, 0.5] )
 model.add(Lambda(lambda x: (x / 255.0) - 0.5))
 model.add(Conv2D(24, (5, 5), strides = (2, 2), activation='relu'))
 model.add(Conv2D(36, (5, 5), strides = (2, 2), activation='relu'))
@@ -120,23 +141,26 @@ model.add(Conv2D(48, (5, 5), strides = (2, 2), activation='relu'))
 model.add(Conv2D(64, (3, 3), activation='relu'))
 model.add(Conv2D(64, (3, 3), activation='relu'))
 model.add(Flatten())
-model.add(Dense(100))
-model.add(Dense(50))
+model.add(Dense(100, activation='relu'))
+model.add(Dense(50, activation='relu'))
 model.add(Dense(10))
 model.add(Dense(1))
 model.compile(loss='mse', optimizer='adam')
-          
-batch_size = 64
+    
 steps_train = int(math.ceil(num_train_samples / batch_size))
 steps_valid = int(math.ceil(num_valid_samples / batch_size))
 train_generator = generator(train_samples, batch_size)
 valid_generator = generator(valid_samples, batch_size)
 
 # train model
+print("Start training model {}".format(model_name))
 history = model.fit_generator(train_generator, steps_train,
                               validation_data = valid_generator,
                               validation_steps = steps_valid,
-                              epochs = 10)
+                              epochs = args.epochs)
 
 # save model
-model.save('model.h5')
+model.save(model_name + ".h5")
+print("Model saved to {}".format(model_name + ".h5"))
+
+print(history.history)
