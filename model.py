@@ -66,13 +66,13 @@ for d in sample_dirs:
                 'steering': -steering
             })
 
-samples = []
-samples_all = shuffle(samples_all)
-print(len(samples_all))
 
-for sample in samples_all:
-    steering = sample['steering']
-    samples.append(sample)
+samples = shuffle(samples_all)
+print(len(samples))
+
+
+
+
 
 # splitting data points into training set and validation set
 train_samples, valid_samples = train_test_split(samples, test_size = 0.2)

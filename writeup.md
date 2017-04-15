@@ -44,6 +44,7 @@ My project includes the following files:
 * drive.py for driving the car in autonomous mode
 * model.h5 containing a trained convolution neural network 
 * writeup.md summarizing the results
+* video.py is the video recording of my vehicle driving autonomously around the track
 
 #### 2. Submission includes functional code
 
@@ -64,11 +65,11 @@ My model, to a large extent, reused the model from nvidia, which used in one of 
 
 The model consists of a convolution neural network with 5x5 and 3x3 filter sizes and depths with 24/36/48/64 (model.py lines 109-124). The output from the convolution layers are then flattened (model.py line 119) and piping into 4 fully connected layers (model.py lines 120-123) to get the final ouput.
 
-The model uses ReLU layers to introduce nonlinearity between all the convolution layers and fully connected layers (expect the final output layer). Data is cropped and normalized in the model using a Keras Cropping2D layer and Lambda layer (model.py lines 111-113). 
+The model uses ReLU layers to introduce nonlinearity between all the convolution layers and fully connected layers (except the final output layer). Data points are cropped and normalized in the model using a Keras Cropping2D layer and Lambda layer (model.py lines 111-113). 
 
 #### 2. Attempts to reduce overfitting in the model
 
-The model does not suffer from overfitting issues, so no regulariztions are introduced to avoid overfitting. (See also [here](#architecture-and-training-documentation) for the loss curve)
+The model does not suffer from overfitting issues, so no regulariztions are introduced to avoid overfitting.
 
 The model was trained and validated on different data sets to ensure that the model was not overfitting. The model was tested by running it through the simulator and ensuring that the vehicle could stay on the track.
 
@@ -78,7 +79,7 @@ The model used an adam optimizer, so the learning rate was not tuned manually (m
 
 #### 4. Appropriate training data
 
-Training data was chosen to keep the vehicle driving on the road. I used a combination of center lane driving, recovering from the left and right sides of the road.
+Training data was chosen to keep the vehicle driving on the road. I used a combination of center lane driving and recovering from the left and right sides of the road.
 
 For details about how I created the training data, see the next section. 
 
@@ -86,23 +87,23 @@ For details about how I created the training data, see the next section.
 
 #### 1. Solution Design Approach
 
-Since this is a task about deriving something from images, I thought I'd better start with models with convolutional layers. Following the instructions from the project pages, I started with (modified) LeNet-5 model.
+Since this is a task about deriving something from images, I thought I'd better start with convolution neural network. Following the instructions from the project pages, I started with LeNet-5 model.
 
-In order to gauge how well the model was working, I split my samples into a training set and a validation set. <TODO: describe how the lenet-5 model performs>
+In order to gauge how well the model was working, I split my samples into a training set and a validation set. The resulting training loss and validation loss for the LeNet-5 model were quite near. No overfitting.
 
-The LeNet-5 model was not "a good driver". When running the simulator backed by the trained model, the car can hardly stay on the lane.
+I ran the simulator with the model and see how the vehicle performed. At first everything looked OK, the vehicle was driving straight steadily. But when it had to make the first turn, it still drove straight and ran out of the lane.
 
 Then I turned to the model mentioned by Nvidia (which was also mentioned in the project guides). The original article from NVidia did not mentioned they had use any methods to avoid overfitting, so I started without regularizations. 
 
-The result was quite impressive. Both the training loss and validation loss were quite small. Running with the simulator, the vehicle was going steadily until when driving across the sharp turn near the end of track 1, it failed to make it and fell into the lake.
+The result was quite impressive. Both the training loss and validation loss were quite small. Running with the simulator, the vehicle was going steadily until when driving across the sharp turn near the end of track 1, it failed to make it and fell into the lake:
 
 ![The first trail for NVidia architecture][training1]
 
-The losses were tell me I did not need to worry about the overfitting issue too much. The failure of driving across sharp turns indicated there were insufficient data points for the model to learn about turning about corners.
+The losses were telling me I did not need to worry about the overfitting issue too much, so the failure of driving across sharp turns might indicated there were insufficient data points for the model to learn about turning about corners, especially the sharp ones.
 
-To handle with this, I collected more data, focusing on turning and also recovering from both sides. <!-- I also tried discarding samples which steering angles were small, then trained and run with the simulator and see how it performed. -->
+To handle with this, I collected more data, focusing on turning and also recovering from both sides.
 
-The above process repeated. Finally the vehicle was able to drive autonomously around the track without leaving the road.
+Finally the vehicle was able to drive autonomously around track 1 without leaving the road.
 
 #### 2. Final Model Architecture
 
@@ -130,7 +131,7 @@ Here is a visualization of the architecture:
 
 #### 3. Creation of the Training Set & Training Process
 
-To capture good driving behavior, I first recorded two laps on track one using center lane driving, one forward and one backward. Here is an example image of center lane driving:
+To capture good driving behavior, I first recorded two laps on track 1 using center lane driving, one forward and one backward. Here are some example images of center lane driving:
 
 ![Center lane driving - 1][center_lane_1]
 ![Center lane driving - 2][center_lane_2]
@@ -138,7 +139,7 @@ To capture good driving behavior, I first recorded two laps on track one using c
 ![Center lane driving - 4][center_lane_4]
 ![Center lane driving - 5][center_lane_5]
 
-I then recorded the vehicle recovering from the left side and right sides of the road back to the center so that the vehicle would learn to drive back when it was off the center. These images show what a recovery looks like starting from the left side of the road.
+I then recorded the vehicle recovering from the left side and right sides of the road back to the center so that the vehicle would learn to drive back when it was off the center. These images show what a recovery looks like starting from the right side of the road.
 
 ![Recovering - 1][recovering_1]
 ![Recovering - 2][recovering_2]
@@ -146,9 +147,9 @@ I then recorded the vehicle recovering from the left side and right sides of the
 ![Recovering - 4][recovering_4]
 ![Recovering - 5][recovering_5]
 
-I also recorded more data when the vehicle making turns, in order to offering more data to the model to learn how to turn a corner. This was a process much similar to recording more laps but turning off recording when the vehicle was driving straightly, and focusing on making turns smoothly.
+I also recorded more data when the vehicle was making turns, in order to offering more data to the model to learn how to turn a corner. This was a process much similar to taking more laps but turning off recording when the vehicle was driving straight, and focusing on making turns smoothly.
 
-To augment the data sat, I also flipped images and angles. By looking at the visualization of data points I've collected:
+To augment the data set, I flipped images and angles. By looking at the visualization of data points I've collected:
 
 ![Data visualization][data_vis1]
 
@@ -169,11 +170,11 @@ Below's the visualization with the flipped data points:
 
 After the collection process, I had gathered 11724 data points, including data points augmented by flipping.
 
-As the Nvidia process suggested, I also convert the sampled images into YUV format (for this reason I've also changed drive.py to make the autonomous driving process using a YUV format input).
+As the Nvidia process suggested, I've also converted the sampled images into YUV format (for this reason I've also changed drive.py to make the autonomous driving process using a YUV format input).
 
 Finally I randomly shuffled the data set and put 20% of the data into a validation set. 
 
-I used this training data for training the model. The validation set helped determine if the model was over or under fitting. The ideal number of epochs was 15 as evidenced by the following figture:
+I used this training data for training the model. The validation set helped determine if the model was over or under fitting. The ideal number of epochs was 15 as evidenced by the loss curve:
 
 ![Loss curve for training 100 epochs][loss_curve]
 
